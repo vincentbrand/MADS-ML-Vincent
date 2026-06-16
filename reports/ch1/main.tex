@@ -1,0 +1,131 @@
+% =====================================================================
+% Ch1 report — Dense networks on Fashion MNIST (1 A4)
+% YOU (the student) write ALL prose. This file only provides structure.
+%
+% WRITE:
+%   - Hypothesis: a real, testable question about how hyperparameters
+%     INTERACT (e.g. width vs depth on simple 28x28 data) — not "tuning helps".
+%   - Experiment design: the six sweeps (units 4x4, depth 2/3/4, learning rate,
+%     optimizer, batch size, epochs), the ranges, and why powers of 2.
+%   - Results: reference Fig.~\ref{fig:units} (key figure), optionally depth/LR.
+%   - Conclusions.
+% REFLECT ON:
+%   - Did width help more than depth here, and WHY for a simple dataset?
+%   - Epochs: upside (learning) vs downside (overfitting, compute).
+%   - Powers of 2: upside (hardware alignment) vs downside (coarse search).
+%   - Why the learning-rate sweet spot sits where it does; why 1e-5 barely learns.
+%   - Did results match the hypothesis; what would you test next?
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1.8cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\setlength{\parskip}{2pt}
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{4pt}{2pt}
+\captionsetup{font=small,skip=3pt}
+\setlength{\intextsep}{5pt}
+\setlength{\textfloatsep}{5pt}
+
+\newcommand{\studentname}{Vincent Brand}
+\newcommand{\studentnumber}{1447806}
+\newcommand{\course}{Machine Learning -- MADS, HAN}
+\newcommand{\reportdate}{2026}
+\newcommand{\repourl}{https://github.com/vincentbrand/MADS-ML-Vincent}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\studentname\ (\studentnumber)}
+\rhead{\course}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\sloppy
+
+% include a figure if it exists, otherwise show a placeholder box.
+% optional first arg = width (default \linewidth) so figures fit on 1 A4.
+\newcommand{\figorbox}[2][\linewidth]{%
+  \IfFileExists{#2}{\includegraphics[width=#1]{#2}}%
+  {\fbox{\parbox[c][3.5cm][c]{0.98\linewidth}{\centering\ttfamily
+   missing figure: #2\\[2pt] run the notebook + export step to generate it}}}}
+
+\begin{document}
+
+\begin{center}
+  {\Large\bfseries Hyperparameter experiments on Fashion MNIST}\\[3pt]
+  \studentname\ \textbar\ \studentnumber\ \textbar\ \course\\
+  \reportdate\ \textbar\ \repourl
+\end{center}
+
+\section{Hypothesis}
+Fashion-MNIST is a small ($28\times28$, single-channel) 10-class problem, so I
+expect a dense network's performance to be limited mainly by the \emph{width} of
+its hidden layers rather than its \emph{depth}. My hypothesis is that on this
+simple data, widening the layers lowers test loss more than stacking extra
+layers, and that the \emph{first} hidden layer --- the one that sees the raw
+784-pixel input --- drives most of that gain. I also expect a clear
+learning-rate sweet spot and diminishing returns past a few epochs.
+
+\section{Experiment design}
+Every run uses the provided three-\texttt{Linear}-layer network
+(\texttt{CrossEntropyLoss}, Adam, \texttt{ReduceLROnPlateau}); I report the final
+test loss. From a $128\times128$ / lr$=10^{-3}$ / batch$=64$ /
+5-epoch baseline I changed one factor at a time across six sweeps: a $4\times4$
+width grid over units1$\times$units2 $\in\{32,64,128,256\}$
+(Fig.~\ref{fig:units}); depth (2/3/4 layers at 64/128/256 units); learning rate
+($10^{-2}$--$10^{-5}$); optimizer (SGD/Adam/AdamW/RMSprop); batch size (8--128);
+and epochs (3/5/10) (Fig.~\ref{fig:sweeps}). I used powers of two because they
+align with how memory and compute tiles are allocated on the hardware; the
+trade-off is a coarse grid that can step over a better value in between.
+
+\section{Results}
+As shown in Fig.~\ref{fig:units}, wider networks consistently reach lower test
+loss: the best two-layer model is $256\times256$ ($0.334$), the worst
+$32\times32$ ($0.405$). Averaged across the grid, widening the \emph{first} layer
+from 32 to 256 units cuts loss by $\approx0.040$ but the \emph{second} layer by
+only $\approx0.018$ --- the first hidden layer matters about twice as much, as
+expected since it must compress the full 784-pixel input. Depth did not help: at
+256 units the two-layer net ($0.331$) beat the three- and four-layer ones
+($0.339$, $0.345$), and at 128/64 units it was flat. The sweeps
+(Fig.~\ref{fig:sweeps}) give a U-shaped learning-rate curve minimised near
+$10^{-3}$ ($0.345$): $10^{-2}$ overshoots ($0.426$) and $10^{-5}$ barely learns
+in 5 epochs ($0.732$). Adam, AdamW and RMSprop are interchangeable
+($\approx0.34$) and all crush SGD ($1.21$); batch size barely matters
+($0.35$--$0.39$).
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[t]{0.34\linewidth}
+    \centering
+    \figorbox[\linewidth]{../figures/ch1-units-heatmap.png}
+    \captionof{figure}{Test loss across units1 (first hidden layer) vs units2
+    (second), two-layer net; darker is better. The first layer's width has the
+    larger effect.}
+    \label{fig:units}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \figorbox[\linewidth]{../figures/ch1-sweeps.png}
+    \captionof{figure}{One-factor sweeps from the $128\times128$ baseline:
+    learning rate (U-shaped, min near $10^{-3}$), optimizer (SGD lags far behind
+    the adaptive ones), batch size and epochs.}
+    \label{fig:sweeps}
+  \end{minipage}
+\end{figure}
+
+\section{Conclusions}
+The results support my hypothesis: width beats depth here, and most of the width
+gain comes from the first hidden layer, because a shallow-but-wide MLP already
+has the capacity to separate the classes while extra layers mainly add
+optimisation difficulty without new structure the data can exploit. The epoch
+sweep shows both faces of longer training: $3\to5$ epochs helped
+($0.375\to0.343$) but 10 was slightly worse ($0.347$) --- an early sign of
+overfitting, so more epochs only pay off for harder data or smaller learning
+rates. Powers of two kept the search hardware-friendly, but
+the coarse grid likely skips the true optimum; the next step is a finer search
+around 256 units and lr$\approx10^{-3}$ with a regulariser.
+
+\end{document}

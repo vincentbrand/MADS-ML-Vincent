@@ -1,0 +1,53 @@
+[project]
+name = "mads-ml-vincent"
+version = "1.0.0"
+description = "MADS Machine Learning course — hyperparameter experiments, CNNs, RNNs, attention, and hypertuning"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "torch>=2.0.1",
+    "mltrainer>=0.2.4",
+    "mads_datasets[torch]>=0.3.12",
+    "ray[tune]",
+    "hyperopt>=0.2.7",
+    "mlflow",
+    "tensorboard",
+    "torch-tb-profiler",
+    "tomlserializer",
+    "torchinfo",
+    "torchvision",
+    "tokenizers>=0.21.0",
+    "scipy",
+    "scikit-learn",
+    "numpy",
+    "pandas",
+    "matplotlib>=3.7.1",
+    "seaborn>=0.12.2",
+    "loguru",
+    "pydantic",
+    "Pillow",
+    "jupyter",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# This repo is a collection of notebooks + scripts, not a distributable package.
+# Tell uv to manage the environment without building/installing the root project.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.17",
+]

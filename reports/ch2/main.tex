@@ -1,0 +1,123 @@
+% =====================================================================
+% Ch2 report — Convolutions + regularisation on Fashion MNIST (1 A4)
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1.8cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\setlength{\parskip}{2pt}
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{3pt}{1pt}
+\captionsetup{font=small,skip=2pt}
+\setlength{\intextsep}{3pt}
+\setlength{\textfloatsep}{3pt}
+
+\newcommand{\studentname}{Vincent Brand}
+\newcommand{\studentnumber}{1447806}
+\newcommand{\course}{Machine Learning -- MADS, HAN}
+\newcommand{\reportdate}{2026}
+\newcommand{\repourl}{https://github.com/vincentbrand/MADS-ML-Vincent}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\studentname\ (\studentnumber)}
+\rhead{\course}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\sloppy
+
+% include a figure if it exists, otherwise show a placeholder box.
+% optional first arg = width (default \linewidth) so figures fit on 1 A4.
+\newcommand{\figorbox}[2][\linewidth]{%
+  \IfFileExists{#2}{\includegraphics[width=#1]{#2}}%
+  {\fbox{\parbox[c][3.5cm][c]{0.98\linewidth}{\centering\ttfamily
+   missing figure: #2\\[2pt] run the notebook to generate it}}}}
+
+\begin{document}
+
+\begin{center}
+  {\Large\bfseries Convolutions, batch normalisation and dropout on Fashion MNIST}\\[3pt]
+  \studentname\ \textbar\ \studentnumber\ \textbar\ \course\\
+  \reportdate\ \textbar\ \repourl
+\end{center}
+
+\section{Hypothesis}
+Ch1's dense network plateaued near $0.85$ --- extra width helped little, extra depth
+not at all --- which motivates convolutions and regularisation. I test three
+hypotheses. \textbf{(H1)} A small CNN should reach the dense baseline's accuracy at
+\emph{far fewer} parameters, since convolution's parameter sharing and local
+connectivity exploit the 2-D structure that flattening the 784 pixels destroys
+(Ch10). \textbf{(H2)} BatchNorm should barely help a shallow CNN but stabilise a
+deeper one and make it learning-rate tolerant, by smoothing a loss landscape whose
+roughness only binds as depth grows (Ch11). \textbf{(H3)} Dropout should shrink the
+train--validation gap and help accuracy \emph{only} when the model overfits; on an
+under-capacity model it should \emph{hurt} by removing usable capacity (Ch9).
+
+\section{Experiment design}
+The CNN stacks conv blocks in an \texttt{nn.ModuleList} ---
+\texttt{Conv2d}($3\times3$)$\to$ReLU$\to$optional
+\texttt{BatchNorm2d}$\to$\texttt{MaxPool2d}, depth set by \texttt{num\_conv\_layers}
+--- then an \texttt{AvgPool2d} and a dense head with optional \texttt{Dropout}; the
+dense baseline is the Ch1 model. All runs share \texttt{CrossEntropyLoss}, Adam,
+\texttt{ReduceLROnPlateau} and one fixed step budget for fair comparison, logged to
+MLflow. H1 pits dense ($64\times32$ to $512\times256$) against CNNs (2--3 layers,
+16--32 filters) by parameter count (Fig.~\ref{fig:h1}); H2 is a
+depth$\times$BatchNorm$\times$lr grid (Fig.~\ref{fig:h2}); H3 varies dropout on a
+small ($64\times32$) and a large ($512\times512$) model (Fig.~\ref{fig:h3}).
+
+\section{Results}
+\textbf{H1 only half held} (Fig.~\ref{fig:h1}): the CNNs are far more
+parameter-efficient --- a 6k-param CNN already learns and the 24k-param 3-layer CNN
+reaches $0.778$ at a $0.6\%$ gap --- yet none beat the dense nets on raw accuracy
+(best dense $0.845$ at 536k params). The CNN curve still climbs steeply (the third
+conv layer alone gave $0.678\!\to\!0.778$), so the binding limit is the narrow
+32-filter extractor, not the principle. \textbf{H2 confirmed} (Fig.~\ref{fig:h2}):
+BatchNorm helped in every cell, most where optimisation struggled (shallow,
+lr$=10^{-3}$: $0.684\!\to\!0.838$); without it the net needed the higher lr, with it
+lr$=10^{-3}$ gave the best model (deep+BN, $0.889$) --- BatchNorm \emph{decoupled}
+accuracy from the learning rate. \textbf{H3 confirmed by regime}
+(Fig.~\ref{fig:h3}): dropout $0.5$ shrank the large model's gap
+($0.0159\!\to\!0.0133$) but on the small model left the gap flat and cut accuracy
+($0.837\!\to\!0.783$).
+
+\begin{figure}[H]
+  \centering
+  \figorbox[0.37\linewidth]{FigureH1.png}
+  \caption{H1 --- validation accuracy vs.\ parameter count (log; up-and-left is
+  better). CNNs use far fewer parameters but do not reach the dense nets' accuracy.}
+  \label{fig:h1}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[t]{0.47\linewidth}
+    \centering
+    \figorbox[\linewidth]{FigureH2.png}
+    \captionof{figure}{H2 --- valid.\ accuracy over conv depth $\times$ BatchNorm at
+    two lr. BatchNorm helps everywhere and is nearly lr-independent.}
+    \label{fig:h2}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.47\linewidth}
+    \centering
+    \figorbox[\linewidth]{FigureH3.png}
+    \captionof{figure}{H3 --- generalisation gap (left) and valid.\ accuracy (right),
+    dropout $0.0$ vs.\ $0.5$. The gap shrinks only on the large model.}
+    \label{fig:h3}
+  \end{minipage}
+\end{figure}
+
+\section{Conclusions}
+BatchNorm was the most valuable addition: it raised accuracy and made the learning
+rate far less critical (the smoother-landscape effect of Ch11), with a payoff that
+grew with depth. Convolutions gave efficiency and tighter generalisation but, at the
+filter widths I could afford, did not overtake the dense baseline --- an honest
+mismatch with H1 that points at the extractor, not the inductive bias. Dropout helped
+only the overparameterised model, and only modestly, since Fashion-MNIST barely
+overfits here. Next I would widen the CNN, drop the global-average head, add
+augmentation, and test on data where regularisation bites harder.
+
+\end{document}

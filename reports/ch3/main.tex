@@ -1,0 +1,114 @@
+% =====================================================================
+% Ch3 report — Recurrent networks on SmartWatch Gestures (1 A4)
+% YOU (the student) write ALL prose. This file only provides structure.
+%
+% WRITE:
+%   - Hypothesis: GRU vs LSTM, or Conv1D-before-RNN, grounded in theory
+%     (gates, hidden state, 1D convolution on timeseries).
+%   - Experiment design: baseline GRU h=64 l=1; what varied (hidden_size,
+%     num_layers, dropout, GRU/LSTM, Conv1D+GRU); MLflow tags; random
+%     baseline = 5% (1/20 classes).
+%   - Results: architecture comparison, accuracy progression / final accuracy,
+%     EXPLICITLY showing >90% achieved.
+%   - Conclusions.
+% REFLECT ON:
+%   - Which architecture won and WHY, linked to the data (variable-length,
+%     3-axis accelerometer).
+%   - Why Conv1D before the RNN makes sense for accelerometer signals.
+%   - GRU vs LSTM trade-off (gate count / parameters) on this data size.
+%   - What did NOT work (e.g. dropout with num_layers=1 is a no-op) and why.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\setlength{\parskip}{4pt}
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{6pt}{3pt}
+\captionsetup{font=small,skip=3pt}
+
+\newcommand{\studentname}{Vincent Brand}
+\newcommand{\studentnumber}{1447806}
+\newcommand{\course}{Machine Learning -- MADS, HAN}
+\newcommand{\reportdate}{2026}
+\newcommand{\repourl}{https://github.com/vincentbrand/MADS-ML-Vincent}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\studentname\ (\studentnumber)}
+\rhead{\course}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\sloppy
+
+\newcommand{\figorbox}[2][\linewidth]{%
+  \IfFileExists{#2}{\includegraphics[width=#1]{#2}}%
+  {\fbox{\parbox[c][3.5cm][c]{0.98\linewidth}{\centering\ttfamily
+   missing figure: #2\\[2pt] run the notebook + export step to generate it}}}}
+
+\begin{document}
+
+\begin{center}
+  {\Large\bfseries Recurrent networks on SmartWatch gestures}\\[3pt]
+  \studentname\ \textbar\ \studentnumber\ \textbar\ \course\\
+  \reportdate\ \textbar\ \repourl
+\end{center}
+
+\section{Hypothesis}
+The gestures are short, variable-length sequences of 3-axis acceleration, and a
+gesture is essentially a sequence of \emph{local} motion primitives (a flick, a
+turn) rather than one long-range dependency. I therefore hypothesise that (a) a
+1D-convolutional front-end before the recurrent layer will help, because Conv1D
+extracts these local temporal features that the GRU then orders in time, and (b)
+GRU and LSTM will perform almost equally, because the sequences are short enough
+that the LSTM's extra cell-state gate buys little over the GRU's lighter
+update/reset gates. Random guessing is 5\% (1/20 classes), so any working model
+should far exceed that.
+
+\section{Experiment design}
+The baseline is the provided GRU (\texttt{hidden\_size}=64, \texttt{num\_layers}=1),
+trained with \texttt{CrossEntropyLoss}, Adam and \texttt{ReduceLROnPlateau} for up
+to 100 epochs with early stopping (patience 10). From there I varied hidden size
+(64/128/256), depth (1/2/3 layers), dropout ($0\to0.3$) and the architecture
+family: plain GRU, LSTM, and a Conv1D+GRU hybrid (which \texttt{permute}s
+$(B,T,F)\!\to\!(B,F,T)$ for the convolution and back before the GRU). Every run is
+logged to MLflow under a descriptive \texttt{model} tag, and Fig.~\ref{fig:arch}
+compares their final validation accuracy.
+
+\section{Results}
+All six architectures comfortably passed the 90\% target (Fig.~\ref{fig:arch}):
+even the GRU baseline reached \textbf{97.97\%}, roughly $20\times$ the 5\% random
+floor. The best model is the \textbf{Conv1D+GRU} (conv\_filters=128, kernel=5,
+$h$=256, 2 layers) at \textbf{99.53\%} (test loss 0.033), ahead of the best LSTM
+(98.91\%) and the best plain GRU (98.59\%). Adding the convolutional front-end
+gave the single largest jump over a same-sized GRU, while GRU and LSTM landed
+within $\approx0.3$ percentage points of each other. Scaling the GRU from $h$=64,
+1 layer to $h$=128, 2 layers helped (97.97\%$\to$98.59\%) but with clearly
+diminishing returns.
+
+\begin{figure}[H]
+  \centering
+  \figorbox[0.66\linewidth]{../figures/ch3-architecture-comparison.png}
+  \caption{Final validation accuracy per architecture on the gestures dataset,
+  coloured by family (GRU / LSTM / Conv1D+GRU). All models clear the 90\% target;
+  the Conv1D+GRU hybrid is best.}
+  \label{fig:arch}
+\end{figure}
+
+\section{Conclusions}
+Both hypotheses held. (a) The Conv1D+GRU won, which fits the data: accelerometer
+gestures are built from local motion shapes, and convolution captures those
+cheaply before the GRU models their order. (b) GRU $\approx$ LSTM here, so the
+LSTM's extra cell state did not pay off on these short sequences and the cheaper
+GRU is the better default. The main caveat is that the task is easy --- even the
+baseline hit 98\%, so differences between architectures are small; a harder
+cross-user split or a tighter epoch budget would separate them better. One thing
+that did \emph{not} work as expected: dropout is a no-op with
+\texttt{num\_layers}=1, since PyTorch only applies it \emph{between} stacked RNN
+layers.
+
+\end{document}
